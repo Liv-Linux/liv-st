@@ -1,24 +1,29 @@
 --- x.c
 +++ x.c
-@@ -709,8 +727,7 @@ brelease(XEvent *e)
+@@ -1145,11 +1156,25 @@ xinit(int cols, int rows)
+ 	Window parent, root;
+ 	pid_t thispid = getpid();
+ 	XColor xmousefg, xmousebg;
++	XWindowAttributes attr;
++	XVisualInfo vis;
  
- 	if (mouseaction(e, 1))
- 		return;
--	if (e->xbutton.button == Button1)
--		mousesel(e, 1);
-+	if (e->xbutton.button == Button1 && !IS_SET(MODE_NORMAL)) mousesel(e, 1);
- }
- 
- void
-@@ -1823,6 +1845,11 @@ kpress(XEvent *ev)
- 		len = XmbLookupString(xw.ime.xic, e, buf, sizeof buf, &ksym, &status);
- 	else
- 		len = XLookupString(e, buf, sizeof buf, &ksym, NULL);
-+	if (IS_SET(MODE_NORMAL)) {
-+		if (kPressHist(buf, len, match(ControlMask, e->state), &ksym)
-+		                                      == finish) normalMode();
-+		return;
+ 	if (!(xw.dpy = XOpenDisplay(NULL)))
+ 		die("can't open display\n");
+ 	xw.scr = XDefaultScreen(xw.dpy);
+-	xw.vis = XDefaultVisual(xw.dpy, xw.scr);
++
++	root = XRootWindow(xw.dpy, xw.scr);
++	if (!(opt_embed && (parent = strtol(opt_embed, NULL, 0))))
++		parent = root;
++
++	if (XMatchVisualInfo(xw.dpy, xw.scr, 32, TrueColor, &vis) != 0) {
++		xw.vis = vis.visual;
++		xw.depth = vis.depth;
++	} else {
++		XGetWindowAttributes(xw.dpy, parent, &attr);
++		xw.vis = attr.visual;
++		xw.depth = attr.depth;
 +	}
- 	/* 1. shortcuts */
- 	for (bp = shortcuts; bp < shortcuts + LEN(shortcuts); bp++) {
- 		if (ksym == bp->keysym && match(bp->mod, e->state)) {
+ 
+ 	/* font */
+ 	if (!FcInit())
