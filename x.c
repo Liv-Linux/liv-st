@@ -219,6 +219,7 @@ static void usage(void);
 
 static void (*handler[LASTEvent])(XEvent *) = {
 	[KeyPress] = kpress,
+	[KeyRelease] = kpress,
 	[ClientMessage] = cmessage,
 	[ConfigureNotify] = resize,
 	[VisibilityNotify] = visibility,
@@ -283,21 +284,33 @@ static char *opt_title = NULL;
 
 static uint buttons; /* bit field of pressed buttons */
 
-void
-clipcopy(const Arg *dummy)
+void clipcopy(const Arg *dummy)
 {
+	static int in_clipcopy = 0;
+	if (in_clipcopy)
+		return;
+
+	in_clipcopy = 1;
+
 	Atom clipboard;
+	char *selected = getsel();
+	if (!selected) {
+		in_clipcopy = 0;
+		return;
+	}
 
 	free(xsel.clipboard);
-	xsel.clipboard = NULL;
-	xsetsel(getsel());
+	xsel.clipboard = xstrdup(selected);
 
-	if (xsel.primary != NULL) {
-		xsel.clipboard = xstrdup(xsel.primary);
-		clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
-		XSetSelectionOwner(xw.dpy, clipboard, xw.win, CurrentTime);
-	}
+	xsetsel(xsel.clipboard);
+
+	clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
+	XSetSelectionOwner(xw.dpy, clipboard, xw.win, CurrentTime);
+
+	free(selected);
+	in_clipcopy = 0;
 }
+
 
 void
 clippaste(const Arg *dummy)
@@ -481,6 +494,10 @@ mouseaction(XEvent *e, uint release)
 
 	/* ignore Button<N>mask for Button<N> - it's set on release */
 	uint state = e->xbutton.state & ~buttonmask(e->xbutton.button);
+
+	if (release == 0 && e->xbutton.button == Button1) {
+		return followurl(evcol(e), evrow(e));
+	}
 
 	for (ms = mshortcuts; ms < mshortcuts + LEN(mshortcuts); ms++) {
 		if (ms->release == release &&
@@ -1680,7 +1697,7 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 	XftDrawGlyphFontSpec(xw.draw, fg, specs, len);
 
 	/* Render underline and strikethrough. */
-	if (base.mode & ATTR_UNDERLINE) {
+	if (base.mode & ATTR_UNDERLINE || base.mode & ATTR_URL) {
 		XftDrawRect(xw.draw, fg, winx, winy + dc.font.ascent * chscale + 1,
 				width, 1);
 	}
@@ -2050,6 +2067,11 @@ kpress(XEvent *ev)
 		                                      == finish) normalMode();
 		return;
 	}
+
+ 	/* KeyRelease not relevant to shortcuts */
+	if (ev->type == KeyRelease)
+		return;
+
 
 	/* 1. shortcuts */
 	for (bp = shortcuts; bp < shortcuts + LEN(shortcuts); bp++) {
