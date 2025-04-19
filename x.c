@@ -284,7 +284,27 @@ static char *opt_title = NULL;
 
 static uint buttons; /* bit field of pressed buttons */
 
+void clipcopy(const Arg *dummy)
+{
+	static int in_clipcopy = 0;
+	if (in_clipcopy)
+		return;
+	in_clipcopy = 1;
+	Atom clipboard;
+	char *selected = getsel();
 
+	if (!selected) {
+		in_clipcopy = 0;
+		return;
+	}
+	free(xsel.clipboard);
+	xsel.clipboard = xstrdup(selected);
+	xsetsel(xsel.clipboard);
+	clipboard = XInternAtom(xw.dpy, "CLIPBOARD", 0);
+	XSetSelectionOwner(xw.dpy, clipboard, xw.win, CurrentTime);
+	free(selected);
+	in_clipcopy = 0;
+}
 
 void
 clippaste(const Arg *dummy)
